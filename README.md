@@ -25,16 +25,21 @@ DSH 插件，用于集中管理本机上的 Git 项目。
 - 同一仓库的同步操作**串行**执行
 - **非交互保护**：命令带 `GIT_TERMINAL_PROMPT=0`，SSH 走 `BatchMode=yes`
 
-## 计划的结构
+## 仓库结构
 
 插件以 DSH bundle 形式开发，源码即包本体：
 
-| 文件 | 作用 |
-| --- | --- |
-| `package.json` | 包声明与 `dsh` 元数据 |
-| `cordis.patch.yml` | 挂载入口 |
-| `index.js` | Host 侧逻辑 |
-| `client.js` | 浏览器侧 UI |
-| `locale/` | 文案 |
+| 文件 | 作用 | 当前状态 |
+| --- | --- | --- |
+| `package.json` | 包声明与 `dsh` 元数据 | 已就位 |
+| `cordis.patch.yml` | 挂载入口（id: `git-sentry`） | 已就位 |
+| `index.js` | Host 侧逻辑 | 空实现，仅导出 `apply` |
+| `client.js` | 浏览器侧 UI | 空实现，不注册任何 slot |
+| `locale/zh.json`、`locale/en.json` | 文案 | 仅 `meta` |
+| `icon.svg` | 图标 | 已就位 |
 
-以上文件尚未创建。
+## 骨架的边界
+
+当前 `client.js` **刻意什么都不渲染**。这样 bundle 能被安装并挂载成功，同时不把尚未
+定稿的界面结构固化进代码——第一期 UI 的落点需要按各 slot 的实际 props 决定，属于
+开发阶段的工作。
