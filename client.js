@@ -12,7 +12,8 @@
  *   - sidebar.footer.action  侧边栏常驻状态行，可展开逐仓库列表
  *   - main                   主区操作台（左列表右详情）——功能的完整载体
  *   - settings.section       设置页一节
- * 刻意不注册 sidebar.panellist：避免与状态行重复，也避免「点图标离开对话」。
+ * 刻意不注册 sidebar.panellist：状态行已承担入口职责，重复入口只会造成困惑。
+ * 亦不注册 sidebar.right.pane.tab（需额外注册 tab 类型定义，延期到 P3）。
  *
  * 第一期范围：纯 UI + mock 数据，不进行任何 git 调用。
  * 注意 RK-11：状态行整块消失时，主区页面必须依然完整可用，因此本文件
@@ -171,11 +172,20 @@ window.__ModuleLoader__.load({
     }
 
     /* ------------------------------------------------------------------ *
-     * 3. 样式工具
+     * 3. 样式体系
      *
-     * 只用 --dsw-* 语义 token，不写死颜色，跟随主题明暗。
+     * 只用 --dsw-alias-* 语义 token，不写死颜色，跟随主题明暗。
+     *
+     * 这里定义一套纯函数样式（而不是散落的内联字面量），目的是让侧边栏
+     * 状态行与宿主的原生行（如「设置」）在**留白、行高、字号、圆角**上
+     * 严格对齐：
+     *   - 侧边栏行的水平内边距统一由 SIDE_PAD 控制；
+     *   - 行高统一由 ROW_H 控制，与宿主行的垂直节奏一致；
+     *   - 字号走主题字号 token 而非硬编码 px。
+     * 之前用 10px/12px/8px 这类手拍数字，是「与主题不搭」的根因。
      * ------------------------------------------------------------------ */
 
+    /** 语义色 token 速查。 */
     const c = {
       text: 'var(--dsw-alias-label-primary)',
       text2: 'var(--dsw-alias-label-secondary)',
@@ -184,13 +194,43 @@ window.__ModuleLoader__.load({
       border: 'var(--dsw-alias-border-l2)',
       borderStrong: 'var(--dsw-alias-border-l3)',
       hover: 'var(--dsw-alias-interactive-bg-hover)',
+      hoverSolid: 'var(--dsw-alias-interactive-bg-hover-solid)',
       active: 'var(--dsw-alias-interactive-bg-active)',
       layer1: 'var(--dsw-alias-bg-layer-1)',
       layer2: 'var(--dsw-alias-bg-layer-2)',
       brand: 'var(--dsw-alias-brand-primary)',
-      link: 'var(--dsw-alias-link)',
       mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+      /* 状态语义色。sidebar 状态行用它表达「最严重级别」。 */
+      ok: 'var(--dsw-alias-state-success-primary)',
+      warn: 'var(--dsw-alias-state-warn-primary)',
+      error: 'var(--dsw-alias-state-error-primary)',
     }
+
+    /** 字号 token —— 与宿主保持一致，不写死 px。 */
+    const fs = {
+      xxs: 'var(--dsw-font-xxs-12)',
+      xs: 'var(--dsw-font-xs-13)',
+      s: 'var(--dsw-font-s-14)',
+      /* 侧边栏状态行的尺寸：压到最小一级，但不小于 12px。 */
+      row: 'var(--dsw-font-xxs-12)',
+    }
+
+    /** 侧边栏行几何 —— 所有侧边栏内的行共用同一组数字，保证垂直节奏一致。 */
+    const SIDE = {
+      /** 水平内边距。宿主侧边栏行的统一留白。 */
+      pad: 8,
+      /** 行最小高度，与宿主 `设置` 行对齐。 */
+      rowH: 32,
+      /** 行内圆角。 */
+      radius: 6,
+      /** 图标与文字之间的间距。 */
+      gap: 8,
+    }
+
+    /** 状态点的像素尺寸（侧边栏与列表共用）。 */
+    const DOT = 8
+    /** 语义圆点的着色映射。 */
+    const DOT_COLOR = { done: c.ok, warning: c.warn, error: c.error }
 
     /** 汇总所有仓库的状态计数，供侧边栏一行文案使用。 */
     function summarize(projects) {
@@ -211,7 +251,67 @@ window.__ModuleLoader__.load({
      * 4. 侧边栏状态行（slot: sidebar.footer.action）
      *
      * owner props 只有 { wide }。窄态（56px 轨道）退化为一个图标 + 角标。
+     *
+     * 视觉要点（对齐宿主原生行的原因）：
+     *   - 整块用「卡片式」容器包住，展开的列表落在同一个容器里，
+     *     而不是散在空隙中——这是此前「元素缺失」的主因；
+     *   - 每一行都用 SIDE.rowH 固定高度，与宿主行等高；
+     *   - 分隔线只在容器顶部画一条，内部行之间不画线。
      * ------------------------------------------------------------------ */
+
+    /**
+     * 一条侧边栏行的基础样式（按钮形态）。
+     * @param active - 是否处于选中/展开态。
+     * @returns 可直接展开到 style 的样式对象。
+     */
+    function sideRowStyle(active) {
+      return {
+        display: 'flex',
+        alignItems: 'center',
+        gap: SIDE.gap,
+        width: '100%',
+        minHeight: SIDE.rowH,
+        boxSizing: 'border-box',
+        padding: `0 ${SIDE.pad}px`,
+        background: active ? c.active : 'transparent',
+        border: 'none',
+        borderRadius: SIDE.radius,
+        cursor: 'pointer',
+        textAlign: 'left',
+        color: c.text2,
+        font: 'inherit',
+      }
+    }
+
+    /** 一个语义状态点。自带 title 便于悬停理解颜色含义。 */
+    function Dot({ dot, size = DOT, title }) {
+      return h('span', {
+        'aria-hidden': true,
+        title,
+        style: {
+          flexShrink: 0, width: size, height: size, borderRadius: '50%',
+          background: DOT_COLOR[dot] || c.text3,
+        },
+      })
+    }
+
+    /**
+     * 状态行上的计数徽标。
+     *
+     * 用「着色数字 + 语义底色」替代单纯的小圆点：圆点只能表达级别，
+     * 徽标能同时表达「有几个」——这是此前状态点「语义不足」的修正。
+     */
+    function CountBadge({ count, dot, title }) {
+      return h('span', {
+        title,
+        style: {
+          flexShrink: 0, display: 'inline-flex', alignItems: 'center', gap: 4,
+          height: 18, padding: '0 6px', borderRadius: 9,
+          background: c.layer2, fontSize: fs.xxs, fontWeight: 500,
+          color: DOT_COLOR[dot] || c.text3, fontVariantNumeric: 'tabular-nums',
+        },
+      }, count)
+    }
 
     /**
      * 渲染侧边栏底部状态行。
@@ -223,91 +323,134 @@ window.__ModuleLoader__.load({
       const sum = useMemo(() => summarize(projects), [projects])
       const dot = worstDot(projects)
       const expanded = s.expanded
+      /** 空状态：一个仓库都没有导入时，不显示一个有误导性的「0 个仓库」。 */
+      const empty = projects.length === 0
 
-      // 窄态：只画图标 + 有事时的角标，点开主区。
+      /** 切到主区并选中某个仓库（点计数徽标或列表项都用它）。 */
+      const openProject = (id) => { setState({ selectedId: id }) }
+
+      // 窄态：只画图标 + 有事时的角标，点击展开/收起。
       if (!wide) {
-        return h('button', {
-          type: 'button',
-          title: sum.needs > 0 ? `git-sentry：${sum.needs} 个仓库需要处理` : 'git-sentry：全部最新',
-          'aria-label': 'Git 仓库状态',
-          onClick: () => { setState({ expanded: !expanded }) },
-          style: {
-            position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
-            width: 32, height: 32, margin: '0 auto', padding: 0,
-            background: expanded ? c.active : 'transparent',
-            border: 'none', borderRadius: 8, cursor: 'pointer', color: c.text2,
-          },
-        },
-          h(GitIcon, { size: 18 }),
-          sum.needs > 0 && h('span', {
-            'aria-hidden': true,
+        return h('div', { style: { padding: `0 ${SIDE.pad}px` } },
+          h('button', {
+            type: 'button',
+            title: empty ? 'git-sentry：尚未导入仓库'
+              : sum.needs > 0 ? `git-sentry：${sum.needs} 个仓库需要处理` : 'git-sentry：全部最新',
+            'aria-label': 'Git 仓库状态',
+            'aria-expanded': expanded,
+            onClick: () => { setState({ expanded: !expanded }) },
             style: {
-              position: 'absolute', top: 2, right: 2, width: 7, height: 7, borderRadius: '50%',
-              background: dot === 'error' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)',
+              ...sideRowStyle(expanded),
+              position: 'relative',
+              justifyContent: 'center',
+              minHeight: SIDE.rowH,
+              padding: 0,
             },
-          }),
+          },
+            h(GitIcon, { size: 18 }),
+            sum.needs > 0 && h('span', {
+              'aria-hidden': true,
+              style: {
+                position: 'absolute', top: 4, right: 4, width: 6, height: 6, borderRadius: '50%',
+                background: DOT_COLOR[dot],
+              },
+            }),
+          ),
         )
       }
 
-      // 宽态：一行汇总，可展开为逐仓库列表。
-      const summaryText = sum.needs === 0
-        ? `${sum.total} 个仓库 · 全部最新`
-        : `${sum.total} 个仓库 · ${sum.needs} 个待处理`
-
-      return h('div', { style: { borderTop: `0.5px solid ${c.border}` } },
+      // 宽态：一行汇总 + 可展开的逐仓库列表，共用同一个容器。
+      return h('div', {
+        style: {
+          margin: `0 ${SIDE.pad}px ${SIDE.pad}px`,
+          borderTop: `0.5px solid ${c.border}`,
+          paddingTop: 6,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1,
+        },
+      },
+        // 汇总行。左侧图标 + 文案，右侧「待处理」徽标 + 展开箭头。
         h('button', {
           type: 'button',
           'aria-expanded': expanded,
+          title: empty ? '尚未导入仓库' : '点击展开各仓库状态',
           onClick: () => { setState({ expanded: !expanded }) },
-          style: {
-            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-            padding: '8px 10px', background: 'transparent', border: 'none',
-            borderRadius: 8, cursor: 'pointer', textAlign: 'left', color: c.text2,
-          },
-          onMouseEnter: (e) => { e.currentTarget.style.background = c.hover },
-          onMouseLeave: (e) => { e.currentTarget.style.background = 'transparent' },
+          style: sideRowStyle(expanded),
+          onMouseEnter: (e) => { if (!expanded) e.currentTarget.style.background = c.hover },
+          onMouseLeave: (e) => { e.currentTarget.style.background = expanded ? c.active : 'transparent' },
         },
           h(GitIcon, { size: 16 }),
           h('span', {
-            style: { flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
-          }, summaryText),
-          h(StateDot, { state: dot, size: 8 }),
+            style: {
+              flex: 1, minWidth: 0, fontSize: fs.row, color: c.text2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            },
+          }, empty ? 'Git Sentry · 尚未导入' : `Git Sentry · ${sum.total} 个仓库`),
+
+          // 计数徽标：可点，直接跳到「第一个待处理的仓库」——把「告知」变成「入口」。
+          sum.needs > 0 && h('span', {
+            onClick: (e) => {
+              e.stopPropagation()
+              const first = projects.find(p => p.status !== 'up-to-date')
+              if (first) { openProject(first.id); setState({ expanded: true }) }
+            },
+            style: { display: 'inline-flex', flexShrink: 0 },
+          }, h(CountBadge, {
+            count: sum.needs,
+            dot,
+            title: `${sum.needs} 个仓库待处理，点击查看`,
+          })),
+
           h('span', {
             'aria-hidden': true,
             style: {
-              fontSize: 10, color: c.text3, transition: 'transform .12s',
+              flexShrink: 0, width: 14, textAlign: 'center',
+              fontSize: 9, color: c.text3, transition: 'transform .12s',
               transform: expanded ? 'rotate(90deg)' : 'none',
             },
           }, '\u25B6'),
         ),
 
         // 展开区：逐仓库一行，点击切到主区并选中该仓库。
-        expanded && h('div', {
-          style: { padding: '0 6px 8px', display: 'flex', flexDirection: 'column', gap: 1 },
-        }, projects.map(p => h('button', {
+        expanded && projects.map(p => h('button', {
           key: p.id,
           type: 'button',
-          onClick: () => { setState({ selectedId: p.id }) },
+          onClick: () => { openProject(p.id) },
           title: p.path,
-          style: {
-            display: 'flex', alignItems: 'center', gap: 8, width: '100%',
-            padding: '5px 6px', background: p.id === s.selectedId ? c.active : 'transparent',
-            border: 'none', borderRadius: 6, cursor: 'pointer', textAlign: 'left', color: c.text2,
+          style: sideRowStyle(p.id === s.selectedId),
+          onMouseEnter: (e) => {
+            if (p.id !== s.selectedId) e.currentTarget.style.background = c.hover
           },
-          onMouseEnter: (e) => { e.currentTarget.style.background = c.hover },
           onMouseLeave: (e) => {
             e.currentTarget.style.background = p.id === s.selectedId ? c.active : 'transparent'
           },
         },
-          h(StateDot, { state: STATUS[p.status].dot, size: 7 }),
+          h(Dot, { dot: STATUS[p.status].dot, size: 7, title: STATUS[p.status].label }),
           h('span', {
-            style: { flex: 1, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+            style: {
+              flex: 1, minWidth: 0, fontSize: fs.row, color: c.text2,
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            },
           }, p.name),
-          h('span', { style: { fontSize: 10, color: c.text3, fontFamily: c.mono } },
+          // 领先/落后：只在与 0 不同时才占位，避免一排 `↑0↓0` 的噪音。
+          (p.ahead > 0 || p.behind > 0) && h('span', {
+            style: {
+              flexShrink: 0, fontSize: fs.row, color: c.text3,
+              fontFamily: c.mono, fontVariantNumeric: 'tabular-nums',
+            },
+          },
             p.ahead > 0 ? `\u2191${p.ahead}` : '',
             p.behind > 0 ? `\u2193${p.behind}` : '',
           ),
-        ))),
+        )),
+
+        // 全部新鲜时给一条明确的收尾文案，避免展开后「什么都没有」的空洞感。
+        expanded && !empty && sum.needs === 0 && h('div', {
+          style: {
+            padding: `4px ${SIDE.pad}px`, fontSize: fs.row, color: c.text3,
+          },
+        }, '所有仓库均为最新'),
       )
     }
 
@@ -694,16 +837,12 @@ window.__ModuleLoader__.load({
           locale: 'git-sentry',
         }, GitSentryPage))
 
-        // 侧边栏面板入口图标，与 main 的 key 配对，便于切回主区。
-        ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
-          name: 'sidebar.panellist',
-          id: 'git-sentry',
-          order: 20,
-          label: () => 'Git Sentry',
-          locale: 'git-sentry',
-        }, function GitSentryPanelIcon({ size }) {
-          return h(GitIcon, { size: size || 18 })
-        }))
+        // 侧边栏面板入口图标。
+        //
+        // 注：此处刻意不注册 sidebar.panellist。底部状态行已经承担了入口职责
+        // （点展开 → 点仓库 → 主区定位到该仓库），再放一个顶部图标会与它重复，
+        // 让用户面对两个功能相同的入口。若将来状态行因 RK-11 降级消失，
+        // 再把它加回来作为兜底入口。
 
         // 设置页一节。
         ctx.slots.inject('settings.section', () => ctx.slots.register({
