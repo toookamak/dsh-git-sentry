@@ -1,0 +1,25 @@
+# 依赖
+node_modules/
+.pnpm-store/
+.yarn/
+
+# 构建产物
+dist/
+build/
+*.tsbuildinfo
+
+# 日志
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# 本地私有配置（不入库）
+.env
+.env.local
+.env.*.local
+
+# 编辑器 / 系统
+.DS_Store
+.idea/
+.vscode/
+*.swp
