@@ -9,20 +9,34 @@ DSH 插件，用于集中管理**本机**上的 Git 项目。
 
 ## 安装
 
-```bash
-dsh plugin install dsh-git-sentry
-```
-
-或从本仓库源码安装（在 DSH profile 目录内执行）：
+插件**未发布到 npm registry**，因此不能用裸包名安装。用 git 源形式：
 
 ```bash
-git clone https://github.com/toookamak/dsh-git-sentry.git
-dsh plugin install /path/to/dsh-git-sentry
+dsh plugin install github:toookamak/dsh-git-sentry
 ```
 
-> 插件是**独立包目录**，以绝对路径安装进 profile。
-> 请勿修改 profile 的 `package.json`，也不要在 profile 目录里跑包管理命令——
-> 那些改动会在升级 DSH 时被覆盖。
+其他等效写法（任选其一）：
+
+```bash
+dsh plugin install https://github.com/toookamak/dsh-git-sentry
+dsh plugin install github:toookamak/dsh-git-sentry#main   # 指定分支
+dsh plugin install /abs/path/to/dsh-git-sentry            # 本地源码路径
+```
+
+> **两个容易踩的坑**（均为实测踩过）：
+>
+> 1. **不能用 `toookamak/dsh-git-sentry` 这种裸短写。** 安装流程会把它当 npm
+>    包名去 registry 解析，而包名规则不允许斜杠，于是报
+>    `not a package name the registry accepts`。这不是「不支持 GitHub」，
+>    是格式没被识别成 git 源——必须带 `github:` 前缀或完整 URL。
+> 2. **不能用 `dsh plugin install dsh-git-sentry`。** 包没发到 registry，
+>    这样装会报找不到。
+
+安装后**需要重启 DSH 或刷新页面**：已安装包的 JavaScript 模块世代不会热更新，
+替换包之后必须重新加载才能生效。
+
+> 插件是**独立包目录**。请勿修改 profile 的 `package.json`，
+> 也不要在 profile 目录里跑包管理命令——那些改动会在升级 DSH 时被覆盖。
 
 ## 当前状态
 
@@ -35,10 +49,13 @@ dsh plugin install /path/to/dsh-git-sentry
 
 | 界面 | 落点 | 内容 |
 | --- | --- | --- |
-| 侧边栏状态行 | `sidebar.footer.action` | 常驻显示「N 个仓库 · M 个待处理」，可展开仓库列表；窄态退化为图标 + 角标 |
+| 侧边栏状态行 | `sidebar.footer.action` | 常驻显示「Git Sentry · N 个仓库」+ 待处理计数徽标，点击徽标直接跳到第一个待处理仓库；可展开逐仓库列表；窄态退化为图标 + 角标 |
 | 主区操作台 | `main` | 左列表右详情：状态、分支、同步来源 / 推送目标分两栏、待合入提交、冲突文件、提交表单、拉取/推送按钮 |
 | 设置页一节 | `settings.section` | 自动同步间隔、自动创建远程分支、逐项目自动同步开关 |
-| 侧边栏图标 | `sidebar.panellist` | 与主区 `main` 配对的入口图标 |
+
+**只有两个入口，且互不重复**：侧边栏状态行（常驻、看状态 + 快速定位）与主区操作台
+（完整功能）。刻意不注册 `sidebar.panellist`——状态行已承担入口职责，
+再放一个顶部图标会与它重复，让用户面对两个功能相同的入口。
 
 侧边栏状态行**只是「少切一次页」的便利**：即使它整块消失，主区页面也完整可用。
 
