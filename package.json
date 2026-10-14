@@ -1,9 +1,20 @@
 {
-  "name": "@local/git-sentry",
+  "name": "dsh-git-sentry",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "集中管理本机 Git 项目的 DSH 插件",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/toookamak/dsh-git-sentry.git"
+  },
+  "homepage": "https://github.com/toookamak/dsh-git-sentry",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "git"
+  ],
+  "main": "./index.js",
   "exports": {
     ".": "./index.js",
     "./client": "./client.js",
